@@ -20,10 +20,10 @@ class MLP(nn.Module):
         x = x.view(x.shape[0], -1)
         x = F.relu(self.fc1(x))
         # Apply dropout
-        #x = self.dropout(x)
+        x = self.dropout(x)
         x = F.relu(self.fc2(x))
         # Apply dropout
-        #x = self.dropout(x)
+        x = self.dropout(x)
         x = F.relu(self.fc3(x))
         x = F.log_softmax(x, dim=1)
 
