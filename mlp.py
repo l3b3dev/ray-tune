@@ -23,7 +23,7 @@ class MLP(nn.Module):
         #x = self.dropout(x)
         x = F.relu(self.fc2(x))
         # Apply dropout
-        x = self.dropout(x)
+        #x = self.dropout(x)
         x = F.relu(self.fc3(x))
         x = F.log_softmax(x, dim=1)
 
