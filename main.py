@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from matplotlib import pyplot as plt
 from torch.utils.data import random_split
 from torchvision import datasets, transforms
 from ray import tune
@@ -189,7 +190,17 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     print("Best trial final validation accuracy: {}".format(
         best_trial.last_result["accuracy"]))
 
-    best_trained_model = MLP(config["l1"], config["l2"])
+    # # Obtain a trial dataframe from all run trials of this `tune.run` call.
+    # dfs = result.trial_dataframes
+    # # Plot by epoch
+    # ax = None  # This plots everything on the same plot
+    # for d in dfs.values():
+    #     ax = d.accuracy.plot(ax=ax, legend=False)
+    # ax.set_xlabel("Epochs")
+    # ax.set_ylabel("Accuracy")
+    # plt.show()
+
+    best_trained_model = MLP(best_trial.config['l1'], best_trial.config['l2'])
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda:0"
@@ -208,5 +219,5 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
 
 if __name__ == "__main__":
     # You can change the number of GPUs per trial here:
-    main(num_samples=10, max_num_epochs=200)
+    main(num_samples=10, max_num_epochs=200, gpus_per_trial=2)
 
