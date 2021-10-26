@@ -158,8 +158,8 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     data_dir = os.path.abspath("./data")
     load_data(data_dir)
     config = {
-        "l1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 9)),
-        "l2": tune.sample_from(lambda _: 2 ** np.random.randint(2, 9)),
+        "l1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
+        "l2": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
         "lr": tune.loguniform(1e-4, 1e-1),
         "batch_size": tune.choice([8, 16, 64, 256]),
         #"momentum": tune.uniform(0.1, 0.9)
