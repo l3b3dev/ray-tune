@@ -47,7 +47,7 @@ class Net(nn.Module):
 
 
 def train(config, checkpoint_dir=None, data_dir=None):
-    net = MLP(config["l1"], config["l2"])
+    net = MLP(config["l1"], config["l2"], config["dr"])
 
     device = "cpu"
     if torch.cuda.is_available():
@@ -158,11 +158,14 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     data_dir = os.path.abspath("./data")
     load_data(data_dir)
     config = {
-        "l1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
-        "l2": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
+        # "l1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
+        # "l2": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
+        "l1": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9, 2 ** 10]),
+        "l2": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9, 2 ** 10]),
         "lr": tune.loguniform(1e-4, 1e-1),
-        "batch_size": tune.choice([8, 16, 64, 256]),
-        #"momentum": tune.uniform(0.1, 0.9)
+        "batch_size": tune.grid_search([8, 16, 32, 64, 128, 256, 512]),  # Batch Size
+        "dr": tune.grid_search([0.3, 0.5, 0.7, 0.85]),  # Dropout
+        # "momentum": tune.uniform(0.1, 0.9)
     }
     scheduler = ASHAScheduler(
         metric="loss",
@@ -199,9 +202,9 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     ax.set_xlabel("Epochs")
     ax.set_ylabel("Accuracy")
     plt.savefig("./mlp-accuracy.png")
-    #plt.show()
+    # plt.show()
 
-    best_trained_model = MLP(best_trial.config['l1'], best_trial.config['l2'])
+    best_trained_model = MLP(best_trial.config['l1'], best_trial.config['l2'], best_trial.config['dr'])
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda:0"
@@ -220,6 +223,4 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
 
 if __name__ == "__main__":
     # You can change the number of GPUs per trial here:
-    main(num_samples=10, max_num_epochs=1000, gpus_per_trial=2)
-
-
+    main(num_samples=10, max_num_epochs=200, gpus_per_trial=2)
