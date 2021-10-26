@@ -190,15 +190,16 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     print("Best trial final validation accuracy: {}".format(
         best_trial.last_result["accuracy"]))
 
-    # # Obtain a trial dataframe from all run trials of this `tune.run` call.
-    # dfs = result.trial_dataframes
-    # # Plot by epoch
-    # ax = None  # This plots everything on the same plot
-    # for d in dfs.values():
-    #     ax = d.accuracy.plot(ax=ax, legend=False)
-    # ax.set_xlabel("Epochs")
-    # ax.set_ylabel("Accuracy")
-    # plt.show()
+    # Obtain a trial dataframe from all run trials of this `tune.run` call.
+    dfs = result.trial_dataframes
+    # Plot by epoch
+    ax = None  # This plots everything on the same plot
+    for d in dfs.values():
+        ax = d.accuracy.plot(ax=ax, legend=False)
+    ax.set_xlabel("Epochs")
+    ax.set_ylabel("Accuracy")
+    plt.savefig("./mlp-accuracy.png")
+    #plt.show()
 
     best_trained_model = MLP(best_trial.config['l1'], best_trial.config['l2'])
     device = "cpu"
