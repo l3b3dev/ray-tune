@@ -220,5 +220,5 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
 
 if __name__ == "__main__":
     # You can change the number of GPUs per trial here:
-    main(num_samples=10, max_num_epochs=80, gpus_per_trial=2)
+    main(num_samples=10, max_num_epochs=1000, gpus_per_trial=2)
 
