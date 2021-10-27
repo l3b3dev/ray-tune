@@ -180,11 +180,11 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     data_dir = os.path.abspath("./data")
     load_data(data_dir)
     config = {
-        "l1": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9, 2 ** 10]),
-        "l2": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9, 2 ** 10]),
-        "lr": tune.grid_search([0.00003, 0.0005, 0.001, 0.0007]),  # Learning Rate
-        "batch_size": tune.grid_search([64, 128, 256, 512]),  # Batch Size
-        "dr": tune.grid_search([0.3, 0.5, 0.7, 0.85]),  # Dropout
+        "l1": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9]),
+        "l2": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9]),
+        "lr": tune.grid_search([0.0005, 0.001, 0.0007]),  # Learning Rate
+        "batch_size": tune.grid_search([64, 128, 256]),  # Batch Size
+        "dr": tune.grid_search([0.3, 0.5, 0.85]),  # Dropout
         # "momentum": tune.uniform(0.1, 0.9)
     }
     scheduler = ASHAScheduler(
