@@ -11,6 +11,7 @@ from torchvision import datasets, transforms
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
+from tqdm import tqdm
 
 from mlp import MLP
 
@@ -46,8 +47,16 @@ class Net(nn.Module):
         return x
 
 
-def train(config, checkpoint_dir=None, data_dir=None):
+def train(config, checkpoint_dir=None, data_dir=None, num_epochs=10):
     net = MLP(config["l1"], config["l2"], config["dr"])
+    accuracy_stats = {
+        'train': [],
+        "val": []
+    }
+    loss_stats = {
+        'train': [],
+        "val": []
+    }
 
     device = "cpu"
     if torch.cuda.is_available():
@@ -74,17 +83,17 @@ def train(config, checkpoint_dir=None, data_dir=None):
     trainloader = torch.utils.data.DataLoader(
         train_subset,
         batch_size=int(config["batch_size"]),
-        shuffle=True,
-        num_workers=8)
+        shuffle=True)
     valloader = torch.utils.data.DataLoader(
         val_subset,
         batch_size=int(config["batch_size"]),
-        shuffle=True,
-        num_workers=8)
+        shuffle=True)
 
-    for epoch in range(10):  # loop over the dataset multiple times
-        running_loss = 0.0
-        epoch_steps = 0
+    for epoch in tqdm(range(1, num_epochs + 1)):
+        train_epoch_loss = 0
+        train_epoch_acc = 0
+
+        net.train()
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -96,74 +105,85 @@ def train(config, checkpoint_dir=None, data_dir=None):
             # forward + backward + optimize
             outputs = net(inputs)
             loss = criterion(outputs, labels)
+
             loss.backward()
             optimizer.step()
 
-            # print statistics
-            running_loss += loss.item()
-            epoch_steps += 1
-            if i % 2000 == 1999:  # print every 2000 mini-batches
-                print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1,
-                                                running_loss / epoch_steps))
-                running_loss = 0.0
+            train_epoch_loss += loss.item()
+            ps = torch.exp(outputs)
+            top_p, top_class = ps.topk(1, dim=1)
+
+            equals = top_class == labels.view(*top_class.shape)
+            train_epoch_acc += torch.mean(equals.type(torch.FloatTensor))
 
         # Validation loss
-        val_loss = 0.0
-        val_steps = 0
-        total = 0
-        correct = 0
-        for i, data in enumerate(valloader, 0):
-            with torch.no_grad():
-                inputs, labels = data
-                inputs, labels = inputs.to(device), labels.to(device)
+        val_epoch_loss = 0
+        val_epoch_acc = 0
 
-                outputs = net(inputs)
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+        net.eval()
+        with torch.no_grad():
+            for i, data in enumerate(valloader, 0):
+                with torch.no_grad():
+                    inputs, labels = data
+                    inputs, labels = inputs.to(device), labels.to(device)
 
-                loss = criterion(outputs, labels)
-                val_loss += loss.cpu().numpy()
-                val_steps += 1
+                    outputs = net(inputs)
+                    ps = torch.exp(outputs)
+                    top_p, top_class = ps.topk(1, dim=1)
+
+                    equals = top_class == labels.view(*top_class.shape)
+                    val_epoch_acc += torch.mean(equals.type(torch.FloatTensor))
+
+                    loss = criterion(outputs, labels)
+                    val_epoch_loss += loss.item()
 
         with tune.checkpoint_dir(epoch) as checkpoint_dir:
             path = os.path.join(checkpoint_dir, "checkpoint")
             torch.save((net.state_dict(), optimizer.state_dict()), path)
 
-        tune.report(loss=(val_loss / val_steps), accuracy=correct / total)
+        loss_stats['train'].append(train_epoch_loss / len(trainloader))
+        loss_stats['val'].append(val_epoch_loss / len(valloader))
+        accuracy_stats['train'].append(train_epoch_acc.item() / len(trainloader))
+        accuracy_stats['val'].append(val_epoch_acc.item() / len(valloader))
+
+        tune.report(train_loss=train_epoch_loss / len(trainloader), loss=val_epoch_loss / len(valloader),
+                    train_accuracy=train_epoch_acc.item() / len(trainloader),
+                    accuracy=val_epoch_acc.item() / len(valloader))
     print("Finished Training")
+    return accuracy_stats, loss_stats
 
 
 def test_accuracy(net, device="cpu"):
     trainset, testset = load_data()
 
     testloader = torch.utils.data.DataLoader(
-        testset, batch_size=4, shuffle=False, num_workers=2)
+        testset, batch_size=4, shuffle=False)
 
-    correct = 0
-    total = 0
+    val_epoch_acc = 0
+
+    net.eval()
     with torch.no_grad():
         for data in testloader:
             images, labels = data
             images, labels = images.to(device), labels.to(device)
             outputs = net(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            ps = torch.exp(outputs)
+            top_p, top_class = ps.topk(1, dim=1)
 
-    return correct / total
+            equals = top_class == labels.view(*top_class.shape)
+            val_epoch_acc += torch.mean(equals.type(torch.FloatTensor))
+
+    return val_epoch_acc.item() / len(testloader)
 
 
 def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     data_dir = os.path.abspath("./data")
     load_data(data_dir)
     config = {
-        # "l1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
-        # "l2": tune.sample_from(lambda _: 2 ** np.random.randint(2, 11)),
         "l1": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9, 2 ** 10]),
         "l2": tune.grid_search([2 ** 6, 2 ** 7, 2 ** 8, 2 ** 9, 2 ** 10]),
-        "lr": tune.loguniform(1e-4, 1e-1),
-        "batch_size": tune.grid_search([8, 16, 32, 64, 128, 256, 512]),  # Batch Size
+        "lr": tune.grid_search([0.00003, 0.0005, 0.001, 0.0007]),  # Learning Rate
+        "batch_size": tune.grid_search([64, 128, 256, 512]),  # Batch Size
         "dr": tune.grid_search([0.3, 0.5, 0.7, 0.85]),  # Dropout
         # "momentum": tune.uniform(0.1, 0.9)
     }
@@ -175,9 +195,9 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
         reduction_factor=2)
     reporter = CLIReporter(
         # parameter_columns=["l1", "l2", "lr", "batch_size"],
-        metric_columns=["loss", "accuracy", "training_iteration"])
+        metric_columns=["train_loss", "loss", "train_accuracy", "accuracy", "training_iteration"])
     result = tune.run(
-        partial(train, data_dir=data_dir),
+        partial(train, data_dir=data_dir, num_epochs=max_num_epochs),
         resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
         config=config,
         num_samples=num_samples,
@@ -194,14 +214,14 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
         best_trial.last_result["accuracy"]))
 
     # Obtain a trial dataframe from all run trials of this `tune.run` call.
-    dfs = result.trial_dataframes
-    # Plot by epoch
-    ax = None  # This plots everything on the same plot
-    for d in dfs.values():
-        ax = d.accuracy.plot(ax=ax, legend=False)
-    ax.set_xlabel("Epochs")
-    ax.set_ylabel("Accuracy")
-    plt.savefig("./mlp-accuracy.png")
+    # dfs = result.trial_dataframes
+    # # Plot by epoch
+    # ax = None  # This plots everything on the same plot
+    # for d in dfs.values():
+    #     ax = d.accuracy.plot(ax=ax, legend=False)
+    # ax.set_xlabel("Epochs")
+    # ax.set_ylabel("Accuracy")
+    # plt.savefig("./mlp-accuracy.png")
     # plt.show()
 
     best_trained_model = MLP(best_trial.config['l1'], best_trial.config['l2'], best_trial.config['dr'])
